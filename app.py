@@ -1,12 +1,13 @@
 import os 
 import streamlit as st
+import speech_recognition as sr
+from gtts import gTTS
 import pyaudio
 import numpy as np
-import soundfile as sf
-from gtts import gTTS
-from pydub import AudioSegment
 import pydub.playback
+from pydub import AudioSegment  
 import tempfile
+import wave
 from PyPDF2 import PdfReader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.vectorstores import FAISS
@@ -15,9 +16,6 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.prompts import PromptTemplate
 from langchain.chains.question_answering import load_qa_chain
 from dotenv import load_dotenv
-import io
-import wave
-import speech_recognition as sr
 
 # Set ffmpeg path explicitly if necessary
 AudioSegment.ffmpeg = "E:/Gemini/ffmpeg/bin/ffmpeg.exe"
@@ -41,55 +39,17 @@ def text_to_speech(text):
         pydub.playback.play(fast_audio)
 
 def speech_to_text():
-    """Convert speech to text using PyAudio for audio capture."""
+    """Convert speech to text using speech_recognition."""
     recognizer = sr.Recognizer()
-    p = pyaudio.PyAudio()
-    
-    # Set parameters for audio capture
-    rate = 16000  # Sampling rate (16kHz is a good default)
-    chunk = 1024  # Chunk size (buffer size for audio)
-    channels = 1  # Mono audio
-    format = pyaudio.paInt16  # 16-bit audio format
-    
-    # Open stream
-    stream = p.open(format=format, channels=channels,
-                    rate=rate, input=True, frames_per_buffer=chunk)
-    
-    print("Listening... Please speak.")
-    frames = []
-    
-    try:
-        for _ in range(0, int(rate / chunk * 5)):  # Record for 5 seconds
-            data = stream.read(chunk)
-            frames.append(data)
-
-        print("Recording finished.")
-        stream.stop_stream()
-        stream.close()
-        p.terminate()
-
-        # Save the recorded audio to a WAV file
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
-            wf = wave.open(temp_audio.name, 'wb')
-            wf.setnchannels(channels)
-            wf.setsampwidth(p.get_sample_size(format))
-            wf.setframerate(rate)
-            wf.writeframes(b''.join(frames))
-            wf.close()
-
-            # Recognize speech from the audio file
-            with sr.AudioFile(temp_audio.name) as source:
-                audio = recognizer.record(source)
-            try:
-                text = recognizer.recognize_google(audio)
-                return text
-            except sr.UnknownValueError:
-                return "Sorry, I couldn't understand. Please try again."
-            except sr.RequestError:
-                return "Error with the speech recognition service."
-
-    except Exception as e:
-        return f"Error occurred while recording: {e}"
+    with sr.Microphone() as source:
+        try:
+            audio = recognizer.listen(source, timeout=5)
+            query = recognizer.recognize_google(audio)
+            return query
+        except sr.UnknownValueError:
+            return "Sorry, I couldn't understand. Please try again."
+        except sr.RequestError:
+            return "Error with the speech recognition service."
 
 def detect_wakeword():
     """Continuously listen for the wake word 'UP' using PyAudio."""
@@ -131,8 +91,18 @@ def detect_wakeword():
                 except sr.UnknownValueError:
                     pass
                 except sr.RequestError:
-                    print("Microphone or recognition service error.")
+                    print("Error with speech recognition service.")
+                    stream.stop_stream()
+                    stream.close()
+                    p.terminate()
                     break
+        except Exception as e:
+            print(f"Error during audio capture: {e}")
+            stream.stop_stream()
+            stream.close()
+            p.terminate()
+            break
+
     return False
 
 def get_pdf_text(pdf_docs=None):
@@ -186,13 +156,13 @@ def general_chatbot_response(query, bot_type="general"):
             prompt_template = f"Answer the following question based on the provided PDF context:\n\nQuestion: {query}\nAnswer:"
 
         elif bot_type == "ChatBot (Typing)" or bot_type == "ChatBot (Voice)":
-            prompt_template = f"Respond as a friendly and helpful chatbot. Here's the question: {query}.Answer it in short sentence"
+            prompt_template = f"Respond as a friendly and helpful chatbot. Here's the question: {query}. Answer it in a short sentence."
 
         elif bot_type == "Alexa-like Bot":
-            prompt_template = f"You're an Alexa-like assistant. The user asked: {query}. Respond with the best possible answer in easy and small sentence if possible."
+            prompt_template = f"You're an Alexa-like assistant. The user asked: {query}. Respond with the best possible answer in easy and short sentences if possible."
 
         else:
-            prompt_template = f"Respond as a general chatbot. Here's the query: {query}. Answer in short sentence"
+            prompt_template = f"Respond as a general chatbot. Here's the query: {query}. Answer in a short sentence."
 
         # Send the prompt to Gemini
         response = chat_model.predict(prompt_template)
