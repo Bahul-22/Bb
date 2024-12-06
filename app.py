@@ -1,13 +1,12 @@
-import os 
+import os
 import streamlit as st
 import speech_recognition as sr
 from gtts import gTTS
-import pyaudio
+import sounddevice as sd
 import numpy as np
 import pydub.playback
 from pydub import AudioSegment  
 import tempfile
-import wave
 from PyPDF2 import PdfReader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.vectorstores import FAISS
@@ -39,7 +38,7 @@ def text_to_speech(text):
         pydub.playback.play(fast_audio)
 
 def speech_to_text():
-    """Convert speech to text using speech_recognition."""
+    """Convert speech to text using sounddevice for audio capture."""
     recognizer = sr.Recognizer()
     with sr.Microphone() as source:
         try:
@@ -52,57 +51,20 @@ def speech_to_text():
             return "Error with the speech recognition service."
 
 def detect_wakeword():
-    """Continuously listen for the wake word 'UP' using PyAudio."""
+    """Continuously listen for the wake word 'UP' using sounddevice."""
     recognizer = sr.Recognizer()
-    p = pyaudio.PyAudio()
-    
-    # Set parameters for audio capture
-    rate = 16000
-    chunk = 1024
-    channels = 1
-    format = pyaudio.paInt16
-    
-    stream = p.open(format=format, channels=channels,
-                    rate=rate, input=True, frames_per_buffer=chunk)
-    
-    print("Listening for wake word 'UP'...")
-    
-    while True:
-        try:
-            data = stream.read(chunk)
-            frames = [data]
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
-                wf = wave.open(temp_audio.name, 'wb')
-                wf.setnchannels(channels)
-                wf.setsampwidth(p.get_sample_size(format))
-                wf.setframerate(rate)
-                wf.writeframes(b''.join(frames))
-                wf.close()
-
-                with sr.AudioFile(temp_audio.name) as source:
-                    audio = recognizer.record(source)
-                try:
-                    query = recognizer.recognize_google(audio)
-                    if "UP" in query.upper():
-                        stream.stop_stream()
-                        stream.close()
-                        p.terminate()
-                        return True
-                except sr.UnknownValueError:
-                    pass
-                except sr.RequestError:
-                    print("Error with speech recognition service.")
-                    stream.stop_stream()
-                    stream.close()
-                    p.terminate()
-                    break
-        except Exception as e:
-            print(f"Error during audio capture: {e}")
-            stream.stop_stream()
-            stream.close()
-            p.terminate()
-            break
-
+    with sr.Microphone() as source:
+        while True:
+            try:
+                audio = recognizer.listen(source, timeout=10, phrase_time_limit=5)
+                query = recognizer.recognize_google(audio)
+                if "UP" in query.upper():
+                    return True
+            except sr.UnknownValueError:
+                pass
+            except sr.RequestError:
+                st.error("Microphone or recognition service error.")
+                break
     return False
 
 def get_pdf_text(pdf_docs=None):
@@ -156,19 +118,31 @@ def general_chatbot_response(query, bot_type="general"):
             prompt_template = f"Answer the following question based on the provided PDF context:\n\nQuestion: {query}\nAnswer:"
 
         elif bot_type == "ChatBot (Typing)" or bot_type == "ChatBot (Voice)":
-            prompt_template = f"Respond as a friendly and helpful chatbot. Here's the question: {query}. Answer it in a short sentence."
+            prompt_template = f"Respond as a friendly and helpful chatbot. Here's the question: {query}.Answer it in short sentence"
 
         elif bot_type == "Alexa-like Bot":
-            prompt_template = f"You're an Alexa-like assistant. The user asked: {query}. Respond with the best possible answer in easy and short sentences if possible."
+            prompt_template = f"You're an Alexa-like assistant. The user asked: {query}. Respond with the best possible answer in easy and small sentence if possible."
 
         else:
-            prompt_template = f"Respond as a general chatbot. Here's the query: {query}. Answer in a short sentence."
+            prompt_template = f"Respond as a general chatbot. Here's the query: {query}. Answer in short sentence"
 
         # Send the prompt to Gemini
         response = chat_model.predict(prompt_template)
         return response
     except Exception as e:
         return f"Sorry, an error occurred: {e}"
+
+def record_audio(duration=5, samplerate=16000):
+    """Record audio using sounddevice."""
+    try:
+        print("Recording...")
+        audio_data = sd.rec(int(duration * samplerate), samplerate=samplerate, channels=1, dtype='int16')
+        sd.wait()  # Wait until recording is finished
+        print("Recording finished.")
+        return audio_data
+    except Exception as e:
+        st.error(f"Error recording audio: {e}")
+        return None
 
 # Main App
 def main():
