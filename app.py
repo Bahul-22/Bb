@@ -110,10 +110,24 @@ def query_pdf(question):
     response = chain({"input_documents": docs, "question": question}, return_only_outputs=True)
     return response.get("output_text", "Sorry, I couldn't find an answer.")
 
-def general_chatbot_response(query):
-    """Handle general chat queries."""
+def general_chatbot_response(query, bot_type="general"):
+    """Handle general chat queries with different prompts for each bot type."""
     try:
-        response = chat_model.predict(query)
+        # Define prompt templates for each bot type
+        if bot_type == "PDF Bot":
+            prompt_template = f"Answer the following question based on the provided PDF context:\n\nQuestion: {query}\nAnswer:"
+
+        elif bot_type == "ChatBot (Typing)" or bot_type == "ChatBot (Voice)":
+            prompt_template = f"Respond as a friendly and helpful chatbot. Here's the question: {query}.Answer it in short sentence"
+
+        elif bot_type == "Alexa-like Bot":
+            prompt_template = f"You're an Alexa-like assistant. The user asked: {query}. Respond with the best possible answer in easy and small sentence if possible."
+
+        else:
+            prompt_template = f"Respond as a general chatbot. Here's the query: {query}. Answer in short sentence"
+
+        # Send the prompt to Gemini
+        response = chat_model.predict(prompt_template)
         return response
     except Exception as e:
         return f"Sorry, an error occurred: {e}"
@@ -143,7 +157,7 @@ def main():
         question = st.text_input("Ask a Question from the PDFs:")
         if question:
             with st.spinner("Thinking..."):
-                answer = query_pdf(question)
+                answer = general_chatbot_response(question, bot_type="PDF Bot")
                 st.write("Response:", answer)
 
     elif bot_type == "ChatBot (Typing)":
@@ -151,7 +165,7 @@ def main():
         query = st.text_input("Ask your question here:")
         if query:
             with st.spinner("Thinking..."):
-                answer = general_chatbot_response(query)
+                answer = general_chatbot_response(query, bot_type="ChatBot (Typing)")
                 st.write("Response:", answer)
 
     elif bot_type == "ChatBot (Voice)":
@@ -166,7 +180,7 @@ def main():
                     st.success("Call ended.")
                 else:
                     with st.spinner("Thinking..."):
-                        answer = general_chatbot_response(voice_query)
+                        answer = general_chatbot_response(voice_query, bot_type="ChatBot (Voice)")
                         st.write("Response:", answer)
                         text_to_speech(answer)
 
@@ -179,7 +193,7 @@ def main():
                 voice_query = speech_to_text()
                 if voice_query:
                     with st.spinner("Thinking..."):
-                        answer = general_chatbot_response(voice_query)
+                        answer = general_chatbot_response(voice_query, bot_type="Alexa-like Bot")
                         st.write("Response:", answer)
                         text_to_speech(answer)
 

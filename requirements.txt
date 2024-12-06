@@ -12,9 +12,8 @@ sympy
 gtts
 pydub
 ffmpeg
-PyAudio
 pvporcupine
 sounddevice
 sentence-transformers
 python-dotenv
-PyAudio-0.2.14-cp39-cp39-win_amd64.whl
+PyAudio
