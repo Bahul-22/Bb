@@ -12,6 +12,7 @@ sympy
 gtts
 pydub
 ffmpeg
+PyAudio
 pvporcupine
 sounddevice
 sentence-transformers
