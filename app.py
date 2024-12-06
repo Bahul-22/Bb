@@ -1,11 +1,10 @@
-import os 
+import os
 import streamlit as st
-import speech_recognition as sr
-from gtts import gTTS
 import sounddevice as sd
+import soundfile as sf
 import numpy as np
-import pydub.playback
-from pydub import AudioSegment  
+from gtts import gTTS
+from pydub import AudioSegment
 import tempfile
 from PyPDF2 import PdfReader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -15,6 +14,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.prompts import PromptTemplate
 from langchain.chains.question_answering import load_qa_chain
 from dotenv import load_dotenv
+import speech_recognition as sr
 
 # Set ffmpeg path explicitly if necessary
 AudioSegment.ffmpeg = "E:/Gemini/ffmpeg/bin/ffmpeg.exe"
@@ -35,37 +35,49 @@ def text_to_speech(text):
         tts.save(temp_audio.name)
         audio = AudioSegment.from_file(temp_audio.name)
         fast_audio = audio.speedup(playback_speed=1.3)
-        pydub.playback.play(fast_audio)
+        fast_audio.export(temp_audio.name, format="wav")
+        data, samplerate = sf.read(temp_audio.name)
+        sd.play(data, samplerate=samplerate)
+        sd.wait()
+
+def record_audio(duration=5, samplerate=44100):
+    """Record audio using sounddevice."""
+    print("Recording...")
+    audio_data = sd.rec(
+        int(duration * samplerate),
+        samplerate=samplerate,
+        channels=1,
+        dtype="int16"
+    )
+    sd.wait()
+    print("Finished recording.")
+    return audio_data.flatten(), samplerate
 
 def speech_to_text():
     """Convert speech to text using sounddevice for audio capture."""
-    recognizer = sr.Recognizer()
-    with sr.Microphone() as source:
-        try:
-            audio = recognizer.listen(source, timeout=5)
-            query = recognizer.recognize_google(audio)
-            return query
-        except sr.UnknownValueError:
-            return "Sorry, I couldn't understand. Please try again."
-        except sr.RequestError:
-            return "Error with the speech recognition service."
+    try:
+        audio_data, samplerate = record_audio(duration=5)
+        # Save recorded audio to a temporary WAV file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
+            sf.write(temp_audio.name, audio_data, samplerate)
+            recognizer = sr.Recognizer()
+            with sr.AudioFile(temp_audio.name) as source:
+                audio = recognizer.record(source)
+                return recognizer.recognize_google(audio)
+    except sr.UnknownValueError:
+        return "Sorry, I couldn't understand. Please try again."
+    except sr.RequestError:
+        return "Error with the speech recognition service."
+    except Exception as e:
+        return f"An error occurred: {e}"
 
 def detect_wakeword():
-    """Continuously listen for the wake word 'UP' using sounddevice."""
-    recognizer = sr.Recognizer()
-    with sr.Microphone() as source:
-        while True:
-            try:
-                audio = recognizer.listen(source, timeout=10, phrase_time_limit=5)
-                query = recognizer.recognize_google(audio)
-                if "UP" in query.upper():
-                    return True
-            except sr.UnknownValueError:
-                pass
-            except sr.RequestError:
-                st.error("Microphone or recognition service error.")
-                break
-    return False
+    """Continuously listen for the wake word 'UP'."""
+    print("Listening for the wake word...")
+    while True:
+        query = speech_to_text()
+        if "UP" in query.upper():
+            return True
 
 def get_pdf_text(pdf_docs=None):
     """Extract text from uploaded or default PDFs."""
@@ -157,11 +169,11 @@ def main():
     elif bot_type == "ChatBot (Voice)":
         st.subheader("ChatBot (Voice): Talk with Bahul's Bot")
         if st.button("Start Voice Call"):
-            st.info("Speak your query. End call when done.")
+            st.info("Speak your query. End call by saying 'end call'.")
             end_call = False
             while not end_call:
                 voice_query = speech_to_text()
-                if voice_query.lower() == "end call":
+                if "end call" in voice_query.lower():
                     end_call = True
                     st.success("Call ended.")
                 else:
