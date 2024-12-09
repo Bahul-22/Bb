@@ -6,14 +6,4 @@ PyPDF2
 faiss-cpu
 langchain_google_genai
 langchain-community==0.0.1
-pyttsx3
-SpeechRecognition
-sympy
-gtts
-pydub
-ffmpeg
-pvporcupine
-sounddevice
 sentence-transformers
-python-dotenv
-PyAudio
