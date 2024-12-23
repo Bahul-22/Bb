@@ -44,12 +44,16 @@ def query_pdf(question):
 
     prompt_template = """
     Answer the question as detailed as possible from the provided context. 
-    If the answer is not available in the context, then answer the question yourself on the level of class 9 NCERT, explaining how you answered.
+    If the answer is not available in the context, then answer the question yourself,explaining how you answered.
+    When asked about identity or other related queries, the chatbot will:Respond in a neutral, helpful manner.
+    Avoid explicitly stating that it's a chatbot by Google or based on Google/Gemini directly.
+    Mention it’s made by Bahul Kansal when asked about its creation.
     
     Context:\n{context}\n
     Question:\n{question}\n
     Answer:
     """
+
     prompt = PromptTemplate(template=prompt_template, input_variables=["context", "question"])
     chain = load_qa_chain(chat_model, chain_type="stuff", prompt=prompt)
 
